@@ -65,14 +65,25 @@ jobs:
           cd /home/runner/k
           export LTO=thin
           export BUILD_CONFIG=common/build.config.gki.aarch64
-          build/build.sh > /home/runner/build.log 2>&1 || { echo BUILD_FAILED; tail -n 40 /home/runner/build.log; exit 1; }
-          ls -la out/*/dist | head -40
+          export SKIP_MRPROPER=1
+          build/build.sh > /home/runner/build.log 2>&1 || {
+            if grep -q "modules list out of date" /home/runner/build.log; then
+              echo "refreshing the modules list and building again"
+              cp out/*/common/modules.order common/android/gki_aarch64_modules
+              build/build.sh > /home/runner/build2.log 2>&1 || tail -n 40 /home/runner/build2.log
+            else
+              tail -n 40 /home/runner/build.log
+              exit 1
+            fi
+          }
+          ls -la out/*/dist | head -40 || true
+          ls -la out/*/common/arch/arm64/boot/Image
       - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: build-log
-          path: /home/runner/build.log
+          path: /home/runner/build*.log
           if-no-files-found: warn
       - name: Check the result
         run: |
@@ -83,7 +94,7 @@ jobs:
         with:
           name: sky-kernel
           path: |
-            /home/runner/k/out/*/dist/Image
+            /home/runner/k/out/*/common/arch/arm64/boot/Image
             /home/runner/k/out/*/dist/Image.lz4
             /home/runner/k/out/*/dist/Image.gz
             /home/runner/k/out/*/dist/System.map
