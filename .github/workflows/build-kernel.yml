@@ -51,12 +51,29 @@ jobs:
           sed -i 's/^ *//' arch/arm64/configs/gki_defconfig
           sed -i 's/check_defconfig//' build.config.gki
           grep -c 'CONFIG_DEVTMPFS=y' arch/arm64/configs/gki_defconfig
+      - name: Add swap
+        run: |
+          sudo swapoff -a || true
+          sudo fallocate -l 16G /swapfile2
+          sudo chmod 600 /swapfile2
+          sudo mkswap /swapfile2
+          sudo swapon /swapfile2
+          free -h
       - name: Build
         shell: bash
         run: |
           cd /home/runner/k
-          BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh 2>&1 | tail -n 60
+          export LTO=thin
+          export BUILD_CONFIG=common/build.config.gki.aarch64
+          build/build.sh > /home/runner/build.log 2>&1 || { echo BUILD_FAILED; tail -n 40 /home/runner/build.log; exit 1; }
           ls -la out/*/dist | head -40
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: /home/runner/build.log
+          if-no-files-found: warn
       - name: Check the result
         run: |
           cd /home/runner/k/out/*/common
